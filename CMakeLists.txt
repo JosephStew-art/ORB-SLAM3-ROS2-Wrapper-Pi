@@ -26,7 +26,10 @@ find_package(Sophus REQUIRED)
 find_package(Pangolin REQUIRED)
 find_package(ORB_SLAM3 REQUIRED)
 find_package(OpenCV REQUIRED)
+<<<<<<< HEAD
 find_package(builtin_interfaces REQUIRED)
+=======
+>>>>>>> 37975756a0a49fb502eea3f17cc67294dc7b630f
 
 # Include directories
 include_directories(
@@ -50,7 +53,10 @@ ament_target_dependencies(mono
   ORB_SLAM3 
   Pangolin 
   OpenCV
+<<<<<<< HEAD
   builtin_interfaces
+=======
+>>>>>>> 37975756a0a49fb502eea3f17cc67294dc7b630f
 )
 
 # Link libraries for mono
@@ -61,7 +67,10 @@ target_link_libraries(mono
   ${ORB_SLAM3_LIBRARIES}
   ${Pangolin_LIBRARIES}
   ${OpenCV_LIBS}
+<<<<<<< HEAD
   ${builtin_interfaces_LIBRARIES}
+=======
+>>>>>>> 37975756a0a49fb502eea3f17cc67294dc7b630f
 )
 
 # Install mono executable
@@ -69,4 +78,8 @@ install(TARGETS mono
   DESTINATION lib/${PROJECT_NAME}
 )
 
+<<<<<<< HEAD
 ament_package()
+=======
+ament_package()
+>>>>>>> 37975756a0a49fb502eea3f17cc67294dc7b630f
