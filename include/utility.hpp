@@ -2,6 +2,7 @@
 #define __UTILITY_HPP__
 
 #include "rclcpp/rclcpp.hpp"
+#include <cmath>
 
 class Utility
 {
