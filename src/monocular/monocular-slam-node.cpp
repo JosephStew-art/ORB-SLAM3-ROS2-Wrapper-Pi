@@ -56,10 +56,10 @@ void MonocularSlamNode::GrabImage(const sensor_msgs::msg::Image::SharedPtr msg)
     }
 
     // Check image dimensions
-    if(image.cols != 640 || image.rows != 300)
+    if(image.cols != 640 || image.rows != 480)
     {
         RCLCPP_WARN(this->get_logger(), "Received image with unexpected dimensions: %dx%d. Resizing to 640x300.", image.cols, image.rows);
-        cv::resize(image, image, cv::Size(640, 300));
+        cv::resize(image, image, cv::Size(640, 480));
     }
 
     RCLCPP_INFO(this->get_logger(), "Processing frame");
