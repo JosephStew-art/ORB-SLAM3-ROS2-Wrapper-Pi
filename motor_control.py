@@ -3,6 +3,8 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, Int32MultiArray
 import RPi.GPIO as GPIO
+import time
+import math
 
 class MotorControlNode(Node):
     def __init__(self):
@@ -62,27 +64,47 @@ class MotorControlNode(Node):
         self.prev_left_ticks = 0
         self.prev_right_ticks = 0
 
+        # Timing and velocity calculation variables
+        self.ticks_per_rotation = 10
+        self.left_last_tick_time = self.get_clock().now()
+        self.right_last_tick_time = self.get_clock().now()
+        self.left_angular_velocity = 0.0
+        self.right_angular_velocity = 0.0
+
     def velocity_callback(self, msg):
         left_speed, right_speed = msg.data
         self.set_motor_speeds(left_speed, right_speed)
+        self.get_logger().info(f'Desired angular velocities: Left: {left_speed:.2f} rad/s, Right: {right_speed:.2f} rad/s')
 
     def encoder_callback(self, msg):
+        current_time = self.get_clock().now()
         new_left_ticks, new_right_ticks = msg.data
-        
-        # Calculate the change in ticks
-        left_diff = new_left_ticks - self.prev_left_ticks
-        right_diff = new_right_ticks - self.prev_right_ticks
 
-        # Update ticks based on direction
-        self.left_ticks += left_diff if self.left_direction >= 0 else -left_diff
-        self.right_ticks += right_diff if self.right_direction >= 0 else -right_diff
+        # Update left wheel
+        left_tick_diff = new_left_ticks - self.prev_left_ticks
+        if left_tick_diff != 0:
+            dt = (current_time - self.left_last_tick_time).nanoseconds / 1e9
+            self.left_angular_velocity = self.calculate_angular_velocity(abs(left_tick_diff), dt, self.left_direction)
+            self.left_last_tick_time = current_time
+            self.left_ticks += left_tick_diff if self.left_direction >= 0 else -left_tick_diff
+            self.prev_left_ticks = new_left_ticks
+            self.get_logger().info(f'Left ticks: {self.left_ticks}, Angular velocity: {self.left_angular_velocity:.2f} rad/s')
 
-        # Update previous tick values
-        self.prev_left_ticks = new_left_ticks
-        self.prev_right_ticks = new_right_ticks
-        
-        # Print updated tick values
-        self.get_logger().info(f'Left ticks: {self.left_ticks}, Right ticks: {self.right_ticks}')
+        # Update right wheel
+        right_tick_diff = new_right_ticks - self.prev_right_ticks
+        if right_tick_diff != 0:
+            dt = (current_time - self.right_last_tick_time).nanoseconds / 1e9
+            self.right_angular_velocity = self.calculate_angular_velocity(abs(right_tick_diff), dt, self.right_direction)
+            self.right_last_tick_time = current_time
+            self.right_ticks += right_tick_diff if self.right_direction >= 0 else -right_tick_diff
+            self.prev_right_ticks = new_right_ticks
+            self.get_logger().info(f'Right ticks: {self.right_ticks}, Angular velocity: {self.right_angular_velocity:.2f} rad/s')
+
+    def calculate_angular_velocity(self, ticks, dt, direction):
+        rotations = ticks / self.ticks_per_rotation
+        angular_velocity = (rotations * 2 * math.pi) / dt  # rad/s
+        return angular_velocity * (1 if direction >= 0 else -1)
+
 
     def set_motor_speeds(self, left_speed, right_speed):
         # Set left motor direction

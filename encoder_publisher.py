@@ -31,18 +31,20 @@ class EncoderPublisher(Node):
         self.create_timer(self.polling_rate, self.poll_encoders)
 
         # Set up timer for publishing
-        self.publishing_rate = 0.1  # 10 Hz publishing rate
+        self.publishing_rate = 0.001 # 1000 Hz publishing rate
         self.create_timer(self.publishing_rate, self.publish_encoder_ticks)
 
     def poll_encoders(self):
+
         # Check left encoder
         current_left_state = GPIO.input(self.LEFT_ENCODER_PIN)
         if current_left_state != self.left_state:
             self.left_debounce_count += 1
             if self.left_debounce_count >= self.DEBOUNCE_THRESHOLD:
-                self.left_ticks += 1
                 self.left_state = current_left_state
                 self.left_debounce_count = 0
+                if self.left_state == 1:
+                    self.left_ticks += 1
         else:
             self.left_debounce_count = 0
 
@@ -51,9 +53,10 @@ class EncoderPublisher(Node):
         if current_right_state != self.right_state:
             self.right_debounce_count += 1
             if self.right_debounce_count >= self.DEBOUNCE_THRESHOLD:
-                self.right_ticks += 1
                 self.right_state = current_right_state
                 self.right_debounce_count = 0
+                if self.right_state == 1:
+                    self.right_ticks += 1
         else:
             self.right_debounce_count = 0
 
