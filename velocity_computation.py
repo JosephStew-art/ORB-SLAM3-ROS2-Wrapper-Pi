@@ -37,9 +37,9 @@ class VelocityComputationNode(Node):
         elif command == 's':
             linear_velocity = -0.1
         elif command == 'a':
-            angular_velocity = 0.25
+            angular_velocity = 3
         elif command == 'd':
-            angular_velocity = -0.25
+            angular_velocity = -3
         elif command == 'x':
             linear_velocity = 0.0
             angular_velocity = 0.0
