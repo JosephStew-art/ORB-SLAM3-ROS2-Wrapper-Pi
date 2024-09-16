@@ -20,7 +20,7 @@ public:
 
     ~MonocularSlamNode();
 
-private:
+public:
     using ImageMsg = sensor_msgs::msg::Image;
 
     void GrabImage(const sensor_msgs::msg::Image::SharedPtr msg);
