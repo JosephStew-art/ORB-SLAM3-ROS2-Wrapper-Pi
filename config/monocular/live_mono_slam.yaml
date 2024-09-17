@@ -6,16 +6,28 @@
 Camera.type: "PinHole"
 
 # Camera calibration and distortion parameters (OpenCV) 
-Camera.fx: 517.306408
-Camera.fy: 516.469215
-Camera.cx: 318.643040
-Camera.cy: 255.313989
+#Camera.fx: 517.306408
+#Camera.fy: 516.469215
+#Camera.cx: 318.643040
+#Camera.cy: 255.313989
 
-Camera.k1: 0.262383
-Camera.k2: -0.953104
-Camera.p1: -0.005358
-Camera.p2: 0.002628
-Camera.k3: 1.163314
+#Camera.k1: 0.262383
+#Camera.k2: -0.953104
+#Camera.p1: -0.005358
+#Camera.p2: 0.002628
+#Camera.k3: 1.163314
+
+Camera.fx: 734.7600708007812
+Camera.fy: 741.2032470703125
+Camera.cx: 313.52150613607955
+Camera.cy: 210.72883201260993
+
+Camera.k1: 0.016376049307530022
+Camera.k2: 0.020272006835536698
+Camera.p1: -0.011690874094127815
+Camera.p2: -0.0006645146840101754
+Camera.k3: -0.6417767859712834
+
 
 # Camera frames per second 
 Camera.fps: 30.0
@@ -50,12 +62,12 @@ ORBextractor.minThFAST: 7
 #--------------------------------------------------------------------------------------------
 # Viewer Parameters
 #--------------------------------------------------------------------------------------------
-Viewer.KeyFrameSize: 0.05
+Viewer.KeyFrameSize: 0.025
 Viewer.KeyFrameLineWidth: 1
 Viewer.GraphLineWidth: 0.9
 Viewer.PointSize:2
 Viewer.CameraSize: 0.08
-Viewer.CameraLineWidth: 3
+Viewer.CameraLineWidth: 2
 Viewer.ViewpointX: 0
 Viewer.ViewpointY: -0.7
 Viewer.ViewpointZ: -1.8
