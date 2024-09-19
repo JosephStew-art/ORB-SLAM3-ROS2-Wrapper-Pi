@@ -45,10 +45,10 @@ void MonocularSlamNode::GrabImage(const sensor_msgs::msg::CompressedImage::Share
         cv::cvtColor(image, gray_image, cv::COLOR_BGR2GRAY);
 
         // Check image dimensions
-        if(gray_image.cols != 640 || gray_image.rows != 480)
+        if(gray_image.cols != 640 || gray_image.rows != 360)
         {
-            RCLCPP_WARN(this->get_logger(), "Received image with unexpected dimensions: %dx%d. Resizing to 640x480.", gray_image.cols, gray_image.rows);
-            cv::resize(gray_image, gray_image, cv::Size(640, 480));
+            RCLCPP_WARN(this->get_logger(), "Received image with unexpected dimensions: %dx%d. Resizing to 640x360", gray_image.cols, gray_image.rows);
+            cv::resize(gray_image, gray_image, cv::Size(640, 360));
         }
 
         // Normalize timestamp
