@@ -15,8 +15,8 @@ class CompressedCameraPublisher(Node):
         self.cap = cv2.VideoCapture(0)  # Open the default camera (usually the webcam)
         
         # Set camera parameters (adjust as needed)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 720)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
         self.cap.set(cv2.CAP_PROP_FPS, 30)
 
     def timer_callback(self):
