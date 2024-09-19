@@ -20,7 +20,7 @@ cap = cv2.VideoCapture(0)  # Use 0 for default webcam, adjust if necessary
 
 # Set resolution to 640x480
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
 
 # Create directory for saving images
 if not os.path.exists('calibration_images'):
@@ -34,11 +34,11 @@ print("Press 'c' to capture an image, 'q' to quit and start calibration.")
 while image_count < max_images:
     ret, frame = cap.read()
     
-    # Ensure the frame is 640x480
-    if frame.shape[0] != 480 or frame.shape[1] != 640:
-        frame = cv2.resize(frame, (640, 480))
+    # Ensure the frame is 640x360
+    if frame.shape[0] != 360 or frame.shape[1] != 640:
+        frame = cv2.resize(frame, (640, 360))
     
-    cv2.imshow('Webcam (640x480)', frame)
+    #cv2.imshow('Webcam (640x480)', frame)
 
     key = cv2.waitKey(1) & 0xFF
     if key == ord('c'):
@@ -67,9 +67,9 @@ for i in range(image_count):
         imgpoints.append(corners2)
 
         # Draw and display the corners
-        cv2.drawChessboardCorners(img, CHECKERBOARD, corners2, ret)
-        cv2.imshow('img', img)
-        cv2.waitKey(500)
+        #cv2.drawChessboardCorners(img, CHECKERBOARD, corners2, ret)
+        #cv2.imshow('img', img)
+        #cv2.waitKey(500)
 
 cv2.destroyAllWindows()
 
@@ -95,6 +95,6 @@ print(f"Camera.k3: {dist[0][4]}")
 print(f"Camera.fps: 30.0")  # Assuming 30 fps, adjust if different
 print(f"Camera.RGB: 1")
 print(f"Camera.width: 640")
-print(f"Camera.height: 480")
+print(f"Camera.height: 360")
 
 print("\nCalibration complete. Use these values to update your ORB-SLAM3 camera.yaml file.")
