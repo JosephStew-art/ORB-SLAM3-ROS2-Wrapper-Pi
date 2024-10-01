@@ -1,47 +1,13 @@
+#!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, Int32MultiArray
 import RPi.GPIO as GPIO
 import time
-import math
 
-class PIDController:
-    def __init__(self, kp, ki, kd, output_limits=None):
-        self.kp = kp
-        self.ki = ki
-        self.kd = kd
-        self.output_limits = output_limits
-        self.reset()
-
-    def reset(self):
-        self.p_term = 0
-        self.i_term = 0
-        self.d_term = 0
-        self.last_error = 0
-        self.last_time = time.time()
-
-    def update(self, setpoint, measured_value):
-        current_time = time.time()
-        dt = current_time - self.last_time
-        error = setpoint - measured_value
-
-        self.p_term = self.kp * error
-        self.i_term += self.ki * error * dt
-        self.d_term = self.kd * (error - self.last_error) / dt if dt > 0 else 0
-
-        output = self.p_term + self.i_term + 0
-
-        if self.output_limits:
-            output = max(min(output, self.output_limits[1]), self.output_limits[0])
-
-        self.last_error = error
-        self.last_time = current_time
-
-        return output
-
-class MotorControlNode(Node):
+class SimpleMotorControlNode(Node):
     def __init__(self):
-        super().__init__('motor_control_node')
+        super().__init__('simple_motor_control_node')
         self.subscription = self.create_subscription(
             Float32MultiArray, 
             '/wheel_velocities', 
@@ -65,16 +31,14 @@ class MotorControlNode(Node):
         self.pwm_pin_left = 18
         self.pwm_pin_right = 19
 
-        # GPIO pins setup for PWM speed control
+        # GPIO pins setup
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
 
         for pin in [self.gpio_pins_forward_right, self.gpio_pins_forward_left, 
-                    self.gpio_pins_backwards_right, self.gpio_pins_backwards_left]:
+                    self.gpio_pins_backwards_right, self.gpio_pins_backwards_left,
+                    self.pwm_pin_left, self.pwm_pin_right]:
             GPIO.setup(pin, GPIO.OUT)
-
-        GPIO.setup(self.pwm_pin_left, GPIO.OUT)
-        GPIO.setup(self.pwm_pin_right, GPIO.OUT)
 
         # Initialize PWM on the GPIO pins
         self.pwm_left = GPIO.PWM(self.pwm_pin_left, 100)  # 100 Hz frequency
@@ -84,151 +48,140 @@ class MotorControlNode(Node):
         self.pwm_right.start(0)
 
         # Set initial state to stop
-        GPIO.output(self.gpio_pins_forward_right, GPIO.LOW)
-        GPIO.output(self.gpio_pins_forward_left, GPIO.LOW)
-        GPIO.output(self.gpio_pins_backwards_right, GPIO.LOW)
-        GPIO.output(self.gpio_pins_backwards_left, GPIO.LOW)
+        self.stop_motors()
 
-        # Variables to track wheel direction and ticks
-        self.left_direction = 0  # 0: stopped, 1: forward, -1: backward
-        self.right_direction = 0
+        # Variables to track wheel ticks and time
         self.left_ticks = 0
         self.right_ticks = 0
         self.prev_left_ticks = 0
         self.prev_right_ticks = 0
+        self.prev_time = self.get_clock().now()
 
-        # Timing and velocity calculation variables
-        self.ticks_per_rotation = 10
-        self.wheel_radius = 0.03125  # meters
-        self.wheel_base = 0.14  # meters (distance between wheels)
-        self.left_last_tick_time = self.get_clock().now()
-        self.right_last_tick_time = self.get_clock().now()
-        self.left_angular_velocity = 0.0
-        self.right_angular_velocity = 0.0
-
-        # Desired velocities (angular)
-        self.desired_left_angular_velocity = 0.0
-        self.desired_right_angular_velocity = 0.0
-
-        # PID controllers
-        self.left_pid = PIDController(kp=0.1, ki=0.1, kd=0.05, output_limits=(-100, 100))
-        self.right_pid = PIDController(kp=0.1, ki=0.1, kd=0.05, output_limits=(-100, 100))
-        self.heading_pid = PIDController(kp=10, ki=2, kd=0.05, output_limits=(-0.5, 0.5))
+        # Desired velocities
+        self.desired_left_velocity = 0.0
+        self.desired_right_velocity = 0.0
 
         # Control loop timer
-        self.control_loop_rate = 0.05  # 20 Hz
+        self.control_loop_rate = 0.1  # 10 Hz
         self.create_timer(self.control_loop_rate, self.control_loop)
 
-        # Flag to determine if PID control should be used
-        self.use_pid_control = False
+        # Base PWM value for forward motion
+        self.base_pwm = 5  # Adjust this value based on your robot's characteristics
+
+        # Correction factors
+        self.course_correction_factor = 0.5  # Adjust this value to change how aggressively the robot corrects its course
+        self.speed_correction_factor = 0.2  # Adjust this value to change how aggressively the robot corrects its speed
+
+        # Target tick rate (ticks per second) for desired speed
+        self.target_tick_rate = 5  # Adjust this value based on your desired speed and encoder resolution
+
+        # New variables for tick difference reset
+        self.tick_difference_offset = 0
+        self.prev_movement_state = False  # False for not moving straight, True for moving straight
 
     def velocity_callback(self, msg):
-        self.desired_left_angular_velocity, self.desired_right_angular_velocity = msg.data
+        new_left_velocity, new_right_velocity = msg.data
         
-        # Check if we should use PID control
-        self.use_pid_control = (self.desired_left_angular_velocity > 0 and 
-                                self.desired_right_angular_velocity > 0 and 
-                                abs(self.desired_left_angular_velocity - self.desired_right_angular_velocity) < 1e-6)
+        # Check if we're transitioning to straight forward movement
+        current_movement_state = self.should_move_straight(new_left_velocity, new_right_velocity)
+        if current_movement_state and not self.prev_movement_state:
+            # Reset the tick difference offset
+            self.tick_difference_offset = self.left_ticks - self.right_ticks
+            self.get_logger().info(f'Resetting tick difference offset to {self.tick_difference_offset}')
+
+        self.desired_left_velocity, self.desired_right_velocity = new_left_velocity, new_right_velocity
+        self.prev_movement_state = current_movement_state
         
-        self.get_logger().info(f'Desired angular velocities: Left: {self.desired_left_angular_velocity:.2f} rad/s, Right: {self.desired_right_angular_velocity:.2f} rad/s')
-        self.get_logger().info(f'Using PID control: {self.use_pid_control}')
+        self.get_logger().info(f'Desired velocities: Left: {self.desired_left_velocity:.2f}, Right: {self.desired_right_velocity:.2f}')
 
     def encoder_callback(self, msg):
-        current_time = self.get_clock().now()
-        new_left_ticks, new_right_ticks = msg.data
-
-        # Update left wheel
-        left_tick_diff = new_left_ticks - self.prev_left_ticks
-        if left_tick_diff != 0:
-            dt = (current_time - self.left_last_tick_time).nanoseconds / 1e9
-            self.left_angular_velocity = self.calculate_angular_velocity(abs(left_tick_diff), dt, self.left_direction)
-            self.left_last_tick_time = current_time
-            self.left_ticks += left_tick_diff if self.left_direction >= 0 else -left_tick_diff
-            self.prev_left_ticks = new_left_ticks
-            self.get_logger().info(f'Left ticks: {self.left_ticks}, Angular velocity: {self.left_angular_velocity:.2f} rad/s')
-
-        # Update right wheel
-        right_tick_diff = new_right_ticks - self.prev_right_ticks
-        if right_tick_diff != 0:
-            dt = (current_time - self.right_last_tick_time).nanoseconds / 1e9
-            self.right_angular_velocity = self.calculate_angular_velocity(abs(right_tick_diff), dt, self.right_direction)
-            self.right_last_tick_time = current_time
-            self.right_ticks += right_tick_diff if self.right_direction >= 0 else -right_tick_diff
-            self.prev_right_ticks = new_right_ticks
-            self.get_logger().info(f'Right ticks: {self.right_ticks}, Angular velocity: {self.right_angular_velocity:.2f} rad/s')
-
-    def calculate_angular_velocity(self, ticks, dt, direction):
-        rotations = ticks / self.ticks_per_rotation
-        angular_velocity = (rotations * 2 * math.pi) / dt  # rad/s
-        return angular_velocity * (1 if direction >= 0 else -1)
+        self.left_ticks, self.right_ticks = msg.data
 
     def control_loop(self):
-        if self.use_pid_control:
-            # PID control for forward motion
-            left_output = self.left_pid.update(self.desired_left_angular_velocity, self.left_angular_velocity)
-            right_output = self.right_pid.update(self.desired_right_angular_velocity, self.right_angular_velocity)
-
-            # Calculate heading error (difference in distances traveled by each wheel)
-            left_distance = self.left_ticks * (2 * math.pi * self.wheel_radius) / self.ticks_per_rotation
-            right_distance = self.right_ticks * (2 * math.pi * self.wheel_radius) / self.ticks_per_rotation
-            heading_error = left_distance - right_distance
-            
-            heading_correction = self.heading_pid.update(0, heading_error)
-
-            # Apply heading correction
-            #left_output -= heading_correction
-            #right_output += heading_correction
-
-            # Convert PID output to PWM duty cycle (assuming PID output range is -100 to 100)
-            left_pwm = abs(left_output)
-            right_pwm = abs(right_output)
+        if self.should_move_straight(self.desired_left_velocity, self.desired_right_velocity):
+            self.move_straight_with_speed_control()
         else:
-            # Open-loop control for other motions
-            # Here we're assuming the desired angular velocities are proportional to the required PWM duty cycle
-            # You might need to adjust this conversion based on your robot's characteristics
-            max_angular_velocity = 10.0  # This should be set to your robot's maximum angular velocity
-            left_pwm = abs(self.desired_left_angular_velocity) / max_angular_velocity * 100
-            right_pwm = abs(self.desired_right_angular_velocity) / max_angular_velocity * 100
+            self.set_motor_speeds(self.desired_left_velocity, self.desired_right_velocity)
+
+    def should_move_straight(self, left_velocity, right_velocity):
+        # Check if both desired velocities are positive and equal (within a small tolerance)
+        return (left_velocity > 0 and 
+                right_velocity > 0 and 
+                abs(left_velocity - right_velocity) < 1e-6)
+
+    def move_straight_with_speed_control(self):
+        current_time = self.get_clock().now()
+        dt = (current_time - self.prev_time).nanoseconds / 1e9  # Convert to seconds
+
+        # Calculate current tick rates
+        left_tick_rate = (self.left_ticks - self.prev_left_ticks) / dt
+        right_tick_rate = (self.right_ticks - self.prev_right_ticks) / dt
+
+        # Calculate average tick rate for speed control
+        avg_tick_rate = (left_tick_rate + right_tick_rate) / 2
+
+        # Calculate adjusted tick difference for course correction
+        adjusted_tick_difference = (self.left_ticks - self.right_ticks) - self.tick_difference_offset
+
+        # Calculate speed correction
+        speed_error = self.target_tick_rate - avg_tick_rate
+        speed_correction = speed_error * self.speed_correction_factor
+
+        # Calculate course correction
+        course_correction = adjusted_tick_difference * self.course_correction_factor
+
+        # Apply corrections to PWM values
+        left_pwm = max(0, min(100, self.base_pwm + speed_correction - course_correction))
+        right_pwm = max(0, min(100, self.base_pwm + speed_correction + course_correction))
 
         # Set motor speeds
         self.set_motor_speeds(left_pwm, right_pwm)
 
+        # Update previous values for next iteration
+        self.prev_left_ticks = self.left_ticks
+        self.prev_right_ticks = self.right_ticks
+        self.prev_time = current_time
+
     def set_motor_speeds(self, left_speed, right_speed):
-        # Set left motor direction
-        if self.desired_left_angular_velocity > 0:
+        # Set left motor direction and speed
+        if left_speed > 0:
             GPIO.output(self.gpio_pins_forward_left, GPIO.HIGH)
             GPIO.output(self.gpio_pins_backwards_left, GPIO.LOW)
-            self.left_direction = 1
-        elif self.desired_left_angular_velocity < 0:
+            self.pwm_left.ChangeDutyCycle(min(abs(left_speed), 100))
+        elif left_speed < 0:
             GPIO.output(self.gpio_pins_forward_left, GPIO.LOW)
             GPIO.output(self.gpio_pins_backwards_left, GPIO.HIGH)
-            self.left_direction = -1
+            self.pwm_left.ChangeDutyCycle(min(abs(left_speed), 100))
         else:
             GPIO.output(self.gpio_pins_forward_left, GPIO.LOW)
             GPIO.output(self.gpio_pins_backwards_left, GPIO.LOW)
-            self.left_direction = 0
+            self.pwm_left.ChangeDutyCycle(0)
 
-        # Set right motor direction
-        if self.desired_right_angular_velocity > 0:
+        # Set right motor direction and speed
+        if right_speed > 0:
             GPIO.output(self.gpio_pins_forward_right, GPIO.HIGH)
             GPIO.output(self.gpio_pins_backwards_right, GPIO.LOW)
-            self.right_direction = 1
-        elif self.desired_right_angular_velocity < 0:
+            self.pwm_right.ChangeDutyCycle(min(abs(right_speed), 100))
+        elif right_speed < 0:
             GPIO.output(self.gpio_pins_forward_right, GPIO.LOW)
             GPIO.output(self.gpio_pins_backwards_right, GPIO.HIGH)
-            self.right_direction = -1
+            self.pwm_right.ChangeDutyCycle(min(abs(right_speed), 100))
         else:
             GPIO.output(self.gpio_pins_forward_right, GPIO.LOW)
             GPIO.output(self.gpio_pins_backwards_right, GPIO.LOW)
-            self.right_direction = 0
+            self.pwm_right.ChangeDutyCycle(0)
 
-        # Set PWM duty cycle based on speed (0 to 100)
-        self.pwm_left.ChangeDutyCycle(min(abs(left_speed), 100))
-        self.pwm_right.ChangeDutyCycle(min(abs(right_speed), 100))
+    def stop_motors(self):
+        GPIO.output(self.gpio_pins_forward_right, GPIO.LOW)
+        GPIO.output(self.gpio_pins_forward_left, GPIO.LOW)
+        GPIO.output(self.gpio_pins_backwards_right, GPIO.LOW)
+        GPIO.output(self.gpio_pins_backwards_left, GPIO.LOW)
+        self.pwm_left.ChangeDutyCycle(0)
+        self.pwm_right.ChangeDutyCycle(0)
 
 def main(args=None):
     rclpy.init(args=args)
-    node = MotorControlNode()
+    node = SimpleMotorControlNode()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
