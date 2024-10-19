@@ -64,12 +64,18 @@ install(TARGETS mono rgbd stereo stereo-inertial
   DESTINATION lib/${PROJECT_NAME})
 
 # Install launch files.
-#install(DIRECTORY launch config vocabulary
-#  DESTINATION share/${PROJECT_NAME}/)
+install(DIRECTORY
+  launch
+  DESTINATION share/${PROJECT_NAME}
+)
+
+# Install Python modules
+ament_python_install_package(${PROJECT_NAME})
 
 install(PROGRAMS
-  src/camera_publisher.py
-  src/url_camera_publisher.py
+  orbslam3/camera_publisher.py
+  orbslam3/url_camera_publisher.py
+  orbslam3/robot_remote_control.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
